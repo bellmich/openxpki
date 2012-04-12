@@ -20,6 +20,8 @@ use OpenXPKI::Server::DBI::DBH;
 
 use Data::Dumper;
 
+use Digest::SHA qw(sha512_hex);
+
 sub new
 {
     shift;
@@ -264,6 +266,16 @@ sub insert
         $names  .= $self->{schema}->get_column ($col);
         $values .= "?";
         push @list, $hash->{$col};
+        ## if this is a TEXT or LONGTEXT column
+        ## then the digest column must be inserted too
+        if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+        {
+            ## insert the digest data
+            $names .= ", ".$self->{schema}->get_column ($col)."_digest";
+            $values .= "?";
+            push @list, sha512_hex($hash->{$col});
+        }
     }
     $sql .= "($names) values ($values)";
 
@@ -299,6 +311,15 @@ sub update
         next if (not exists $hash->{$col});
         push @data, $self->{schema}->get_column ($col)." = ?";
         push @list, $hash->{$col};
+        ## if this is a TEXT or LONGTEXT column
+        ## then the digest column must be updated too
+        if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+        {
+            ## update the digest data
+            push @data, $self->{schema}->get_column ($col)."_digest = ?"
+            push @list, sha512_hex($hash->{$col});
+        }
     }
     if (! scalar @data) {
         OpenXPKI::Exception->throw(
