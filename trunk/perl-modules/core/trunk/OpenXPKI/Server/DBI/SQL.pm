@@ -332,8 +332,19 @@ sub update
 
     foreach my $key (keys %{$where})
     {
-        push @where, $self->{schema}->get_column ($key)." = ?";
-        push @list, $where->{$key};
+        ## Some databases cannot index or join on CLOB columns.
+        ## Therefore we join on the according digest column.
+        if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+        {
+            # use digest column
+            push @where, $self->{schema}->get_column ($key)."_digest = ?";
+            push @list, sha512_hex($where->{$key});
+        } else {
+            # use the normal column
+            push @where, $self->{schema}->get_column ($key)." = ?";
+            push @list, $where->{$key};
+        }
     }
     $sql .= " where ".join " and ", @where;
 
