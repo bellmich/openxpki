@@ -875,16 +875,32 @@ sub select
 			    $symbolic_select_tables[$ii]->{SYMBOLIC_NAME}
 			    );
 		    }
-		    
+
+		    my $column = $self->{schema}->get_column($join->[$join_index]);
 		    my $left = 
 			$left_table 
-			. '.' 
-			. $self->{schema}->get_column($join->[$join_index]);
+			. '.'
+			. $column;
+                    if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+                        $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
+                    {
+                        ## If this is a TEXT or LONGTEXT column
+                        ## then join on the according digest column.
+                        $left .= "_digest";
+                    }
 
+                    $column = $self->{schema}->get_column($join->[$ii]);
 		    my $right = 
 			$right_table 
 			. '.' 
-			. $self->{schema}->get_column($join->[$ii]);
+			. $column;
+                    if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+                        $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
+                    {
+                        ## If this is a TEXT or LONGTEXT column
+                        ## then join on the according digest column.
+                        $right .= "_digest";
+                    }
 
 		    ### $left
 		    ### $right
@@ -1073,15 +1089,45 @@ sub select
                 $lhs = $tab . '.';
             }
             $lhs .= $col;
+
+            ## If this is a TEXT or LONGTEXT column
+            ## then we must use the digest column.
+            if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+                $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+            {
+                ## use digest column
+                $lhs .= "_digest";
+            }
 	    
             my @dynamic_values;
 
             if (ref $args->{DYNAMIC}->{$dynamic_key}->{VALUE} eq '') {
                 ##! 64: 'pushing scalar dynamic value for ' . $dynamic_key
-                push @dynamic_values, $args->{DYNAMIC}->{$dynamic_key}->{VALUE};
+                ## If this is a TEXT or LONGTEXT column
+                ## then we must use the digest value.
+                if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+                    $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+                {
+                    push @dynamic_values, sha512_hex($args->{DYNAMIC}->{$dynamic_key}->{VALUE});
+                } else {
+                    push @dynamic_values, $args->{DYNAMIC}->{$dynamic_key}->{VALUE};
+                }
             } elsif (ref $args->{DYNAMIC}->{$dynamic_key}->{VALUE} eq 'ARRAY') {
                 ##! 64: 'pushing arrayref dynamic value for ' . $dynamic_key
-                push @dynamic_values, $args->{DYNAMIC}->{$dynamic_key}->{VALUE};
+                ## If this is a TEXT or LONGTEXT column
+                ## then we must use the digest values.
+                if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+                    $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+                {
+                    my @list = ();
+                    foreach my $value (@{$args->{DYNAMIC}->{$dynamic_key}->{VALUE}})
+                    {
+                        push @list, sha512_hex($value);
+                    }
+                    push @dynamic_value, [ @list ];
+                } else {
+                    push @dynamic_values, $args->{DYNAMIC}->{$dynamic_key}->{VALUE};
+                }
             } else {
                 OpenXPKI::Exception->throw (
                     message => "I18N_OPENXPKI_SERVER_DBI_SQL_SELECT_INVALID_DYNAMIC_QUERY",
@@ -1105,6 +1151,16 @@ sub select
                     {
                         OpenXPKI::Exception->throw (
                             message => "I18N_OPENXPKI_SERVER_DBI_SQL_SELECT_LIKE_ON_NUMERIC",
+                            params  => {
+                                CONDITION => $dynamic_key,
+                        });
+                    }
+                    if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
+                        $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+                    {
+                        ## digests can only match
+                        OpenXPKI::Exception->throw (
+                            message => "I18N_OPENXPKI_SERVER_DBI_SQL_SELECT_LIKE_ON_LOB",
                             params  => {
                                 CONDITION => $dynamic_key,
                         });
