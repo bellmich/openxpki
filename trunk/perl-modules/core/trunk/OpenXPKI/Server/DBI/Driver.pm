@@ -159,6 +159,13 @@ sub new
                 params  => {"COLUMN" => $key, "TYPE" => $COLUMN{$key}});
         }
         $self->{column}->{$key} = $type{$COLUMN{$key}};
+
+        ## If this is TEXT or LONGTEXT column
+        ## then we need an extra digest column for indexing and joining.
+        if ($COLUMN{$key} eq "TEXT" or $COLUMN{$key} eq "LONGTEXT")
+        {
+            $self->{column}->{$key."_digest"} = $type{"TEXT_KEY"};
+        }
     }
 
     ## DBI_OPTION, LIMIT and LIMITSTART must be set by the driver
