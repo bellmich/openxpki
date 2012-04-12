@@ -91,6 +91,21 @@ sub create_table
             $command .= " NOT NULL";
         }
         $command .= ", ";
+
+        ## do we need a digest column?
+        if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
+        {
+            ## add a digest column
+            $column = $self->{schema}->get_column ($col."_digest");
+            $type   = $self->{DBH}->get_column_type ($column);
+            $command .= "$column $type";
+            if (scalar grep /^${col}$/, @{$self->{schema}->get_table_index($table)})
+            {
+                $command .= " NOT NULL";
+            }
+        }
+        $command .= ", ";
     }
 
     ## a SERIAL column can contain a primary key statement
