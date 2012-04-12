@@ -118,7 +118,17 @@ sub create_table
         $command .= "PRIMARY KEY (";
         foreach my $col (@{$self->{schema}->get_table_index($table)})
         {
-            $command .= $self->{schema}->get_column ($col);
+            my $column = $self->{schema}->get_column ($col);
+            $command .= $column;
+
+            ## If this is TEXT or LONGTEXT column
+            ## then the digest column must be used.
+            if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+                $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
+            {
+                ## use the digest column
+                $column .= "_digest";
+            }
             $command .= ", ";
         }
         $command = substr ($command, 0, length($command)-2); ## erase the last ,
