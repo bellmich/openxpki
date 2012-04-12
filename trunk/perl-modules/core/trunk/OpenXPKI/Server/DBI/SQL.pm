@@ -99,15 +99,14 @@ sub create_table
             $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
         {
             ## add a digest column
-            $column = $self->{schema}->get_column ($col."_digest");
-            $type   = $self->{DBH}->get_column_type ($column);
-            $command .= "$column $type";
+            $type   = $self->{DBH}->get_column_type ($column."_digest");
+            $command .= $column."_digest ".$type;
             if (scalar grep /^${col}$/, @{$self->{schema}->get_table_index($table)})
             {
                 $command .= " NOT NULL";
             }
+            $command .= ", ";
         }
-        $command .= ", ";
     }
 
     ## a SERIAL column can contain a primary key statement
@@ -271,19 +270,20 @@ sub insert
     foreach my $col (@{$self->{schema}->get_table_columns($table)})
     {
         next if (not exists $hash->{$col});
+        my $column = $self->{schema}->get_column ($col);
         $names  .= ", " if (length($names));
         $values .= ", " if (length($values));
-        $names  .= $self->{schema}->get_column ($col);
+        $names  .= $column;
         $values .= "?";
         push @list, $hash->{$col};
         ## if this is a TEXT or LONGTEXT column
         ## then the digest column must be inserted too
-        if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
-            $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+        if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
         {
             ## insert the digest data
-            $names .= ", ".$self->{schema}->get_column ($col)."_digest";
-            $values .= "?";
+            $names .= ", ".$column."_digest";
+            $values .= ", ?";
             push @list, sha512_hex($hash->{$col});
         }
     }
@@ -327,7 +327,7 @@ sub update
             $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
         {
             ## update the digest data
-            push @data, $self->{schema}->get_column ($col)."_digest = ?"
+            push @data, $self->{schema}->get_column ($col)."_digest = ?";
             push @list, sha512_hex($hash->{$col});
         }
     }
@@ -342,17 +342,18 @@ sub update
 
     foreach my $key (keys %{$where})
     {
+        my $column = $self->{schema}->get_column ($key);
         ## Some databases cannot index or join on CLOB columns.
         ## Therefore we join on the according digest column.
-        if ($self->{DBH}->get_abstract_column_type($col) eq "TEXT" or
-            $self->{DBH}->get_abstract_column_type($col) eq "LONGTEXT")
+        if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
         {
             # use digest column
-            push @where, $self->{schema}->get_column ($key)."_digest = ?";
+            push @where, $column."_digest = ?";
             push @list, sha512_hex($where->{$key});
         } else {
             # use the normal column
-            push @where, $self->{schema}->get_column ($key)." = ?";
+            push @where, $column." = ?";
             push @list, $where->{$key};
         }
     }
@@ -1124,7 +1125,7 @@ sub select
                     {
                         push @list, sha512_hex($value);
                     }
-                    push @dynamic_value, [ @list ];
+                    push @dynamic_values, [ @list ];
                 } else {
                     push @dynamic_values, $args->{DYNAMIC}->{$dynamic_key}->{VALUE};
                 }
