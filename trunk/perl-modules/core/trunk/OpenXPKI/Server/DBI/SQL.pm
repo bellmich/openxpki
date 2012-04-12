@@ -167,7 +167,16 @@ sub create_index
     my $command = "create index $index on $table (";
     foreach my $col (@{$self->{schema}->get_index_columns($name)})
     {
-        $command .= $self->{schema}->get_column ($col);
+        my $column = $self->{schema}->get_column ($col);
+        $command .= $column;
+
+        ## If a TEXT or LONGTEXT column is used for an index
+        ## then it is replaced by the according digest column.
+        if ($self->{DBH}->get_abstract_column_type($column) eq "TEXT" or
+            $self->{DBH}->get_abstract_column_type($column) eq "LONGTEXT")
+        {
+            $command .= "_digest";
+        }
         $command .= ", ";
     }
     $command = substr ($command, 0, length($command)-2); ## erase the last ,
